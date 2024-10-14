@@ -1,0 +1,258 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+
+## Ngore, Lucy
+
+### Multiple Linear Regression and Special Issues Assignment
+
+```{r, packages}
+options(repos = c(CRAN = "https://cloud.r-project.org/"))
+install.packages("glmnet", repos = "https://cloud.r-project.org/")
+install.packages("ggcorrplot", repos = "https://cloud.r-project.org/") 
+install.packages("MASS", repos = "https://cloud.r-project.org/")
+install.packages("lubridate", repos = "https://cloud.r-project.org/")
+install.packages("car", repos = "https://cloud.r-project.org/")
+install.packages("splines", repos = "https://cloud.r-project.org/")
+install.packages("leaps", repos = "https://cloud.r-project.org/")
+install.packages("lmtest",repos = "https://cloud.r-project.org/")
+```
+
+
+```{r, warning=FALSE,message=FALSE}
+library(tidyverse)
+library(tidymodels)
+library(GGally)
+library(glmnet)
+library(ggcorrplot)
+library(MASS)
+library(car)
+library(lubridate)
+library(lmtest)
+library(splines)
+library(leaps)
+library(readr)
+library(dplyr)
+library(broom)
+```
+
+```{r, Reading in data}
+bike_cleaned_3 <- read_csv("bike_cleaned-3.csv")
+```
+
+Summarize and examine the structure of the data
+
+```{r}
+str(bike_cleaned_3)
+summary(bike_cleaned_3) #statistical summary
+glimpse(bike_cleaned_3)
+head(bike_cleaned_3)
+```
+
+Convert “dteday” from a character variable to a date variable
+
+```{r}
+bike_cleaned_3 = bike_cleaned_3 %>% mutate(dteday = mdy(dteday))
+```
+
+Convert the remaining character variables to factors
+
+```{r}
+bike_cleaned_3 = bike_cleaned_3 %>% mutate_if(is.character, as_factor)
+```
+
+```{r, convert the “hr” variable into a factor}
+bike_cleaned_3 = bike_cleaned_3 %>% mutate(hr = as_factor(hr))
+```
+
+#Question 1 Which of the quantitative variables appears to be best correlated with “count”? NOTE: Ignore the “registered” and “casual” variable as the sum of these two variables equals “count”. Because these variables combine to make the response variable, they cannot be used as predictors. You can also ignore the “instant” variable as it is just a row number. Answer = C. atemp
+A. windspeed
+B. hum
+C. atemp
+D. temp
+
+```{r}
+ggplot(bike_cleaned_3, aes(x=count)) + geom_histogram() + theme_bw()
+```
+
+```{r}
+ggcorr(bike_cleaned_3, label = "TRUE", label_round = 2) 
+```
+
+```{r}
+ggplot(bike_cleaned_3, aes(x = factor(hr), y = count)) +
+  geom_boxplot() +
+  labs(x = "Hour of the Day", y = "Count", title = "Boxplot of Bike Count by Hour") +
+  theme_minimal()
+```
+
+#Question 2 Which “season” appears to have the highest count of rides? Answear = C. Summer
+A. Winter
+B. Spring
+C. Summer
+D. Fall
+
+```{r}
+season_count <- bike_cleaned_3 %>%
+  group_by(season) %>%
+  summarise(total_count = sum(count, na.rm = TRUE))
+
+print(season_count)
+```
+
+#Question 3 Build a linear regression model (using tidymodels) with “hr” to predict “count”. You will use this model to answer the next several questions.
+
+
+```{r}
+bike_recipe <- recipe(count ~ hr, data = bike_cleaned_3)
+bike_model <- linear_reg() %>%
+  set_engine("lm")
+bike_workflow <- workflow() %>%
+  add_recipe(bike_recipe) %>%
+  add_model(bike_model)
+summary(bike_workflow)
+```
+
+#Question 4 In your model from Question 3, which hour is selected as the “base” level (category)? The base level does not have an associated coefficient (slope) in the linear regression model.Answear = 0
+
+```{r}
+bike_recipe <- recipe(count ~ hr, data = bike_cleaned_3) %>%
+  step_dummy(hr)
+levels(bike_cleaned_3$hr)
+
+```
+
+#Question 5 During which hour of the day does the model predict the highest number of rides?
+
+```{r}
+hours <- data.frame(hr = factor(0:23, levels = levels(bike_cleaned_3$hr)))
+ bike_recipe <- recipe(count ~ hr + temp + atemp + hum + windspeed, data = bike_cleaned_3) 
+ fit <- bike_fit %>% extract_fit_parsnip()
+fit_tidy <- tidy(fit$fit) 
+print(fit_tidy)
+```
+
+#Question 6 Plot “temp” (x axis) versus “count” (y axis) using an appropriate plot type.
+Which statement best describes the general relationship between “temp” and “count”? Answer = A
+A. As “temp” increases, “count” appears to generally increase.
+B. As “temp” increases, “count” appears to generally decrease.
+C. There does not appear to be a relationship between “temp” and “count”
+
+```{r}
+ggplot(bike_cleaned_3, aes(x = temp, y = count)) +
+  geom_point(aes(color = temp), alpha = 0.5) +  # Color points by temperature
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +  # Add a regression line
+  labs(x = "Temperature", y = "Count", title = "Scatter Plot of Temperature vs. Count") +
+  theme_minimal()
+```
+
+#Question 7 Create a linear regression model (using tidymodels) with “hr” and “temp” to predict “count”.Use this model to answer the next several questions.
+What is the value of the slope coefficient for “hr23” in this model (to three decimal places)?
+
+```{r}
+bike_recipe <- recipe(count ~ hr + temp, data = bike_cleaned_3) %>%
+  step_dummy(hr)
+bike_model <- linear_reg() %>%
+  set_engine("lm")
+bike_workflow <- workflow() %>%
+  add_recipe(bike_recipe) %>%
+  add_model(bike_model)
+bike_fit <- bike_workflow %>%
+ fit(data = bike_cleaned_3)
+fit <- bike_fit %>% extract_fit_parsnip()
+summary(fit$fit)
+```
+
+#Question 8 What is the adjusted R-squared value (to four decimal places) for the model from Question 7?
+
+```{r}
+bike_recipe <- recipe(count ~ hr + temp, data = bike_cleaned_3) %>%
+  step_dummy(hr)
+bike_model <- linear_reg() %>%
+  set_engine("lm")
+bike_workflow <- workflow() %>%
+  add_recipe(bike_recipe) %>%
+  add_model(bike_model)
+fit <- bike_fit %>% extract_fit_parsnip()
+fit_glance <- glance(fit$fit)
+adjusted_r_squared <- fit_glance$adj.r.squared
+round(adjusted_r_squared, 4)
+```
+
+#Question 9 Create a linear regression model (using tidymodels as usual) with “temp” and “atemp” to predict “count”. What is the adjusted R-squared value (to four decimal places) of this model?
+
+
+```{r}
+bike_recipe <- recipe(count ~ temp + atemp, data = bike_cleaned_3)
+bike_model <- linear_reg() %>%
+  set_engine("lm")
+bike_workflow <- workflow() %>%
+  add_recipe(bike_recipe) %>%
+  add_model(bike_model)
+fit <- bike_fit %>% extract_fit_parsnip()
+fit_glance <- glance(fit$fit)
+adjusted_r_squared <- fit_glance$adj.r.squared
+round(adjusted_r_squared, 4)
+```
+
+#Question 10 Which of the two variables in the model from Question 9 are significant?
+A. temp ONLY
+B. atemp ONLY
+C. Neither temp nor atemp are significant
+D. Both temp and atemp are significant
+
+```{r}
+bike_recipe <- recipe(count ~ temp + atemp, data = bike_cleaned_3)
+bike_model <- linear_reg() %>%
+  set_engine("lm")
+bike_workflow <- workflow() %>%
+  add_recipe(bike_recipe) %>%
+  add_model(bike_model)
+fit <- bike_fit %>% extract_fit_parsnip()
+```
+
+#Question 11 The model from Question 9 likely demonstrates which phenomenon?Answer = C
+A. Non-constant variance of residuals
+B. Non-normality of residuals
+C. Multicollinearity
+D. None of these
+
+```{r}
+cor(bike_cleaned_3$temp, bike_cleaned_3$atemp)
+model <- lm(count ~ temp + atemp, data = bike_cleaned_3)
+vif(model)
+```
+
+#Question 12 Build a backward stepwise regression model to predict “count”. Your “allmod” (the starting model) should include the following variables: season, mnth, hr, holiday, weekday, workingday, weathersit,temp, atemp, hum, and windspeed.
+In the “allmod” you should see that the “workingday” variable appears with “NA” values in the model
+summary. This is happening because “workingday” is a perfect combination of two other predictor variables.
+Which two variables combine to make “workingday”?
+A. season and mnth
+B. weekday and holiday
+C. hr and mnth
+D. season and mnth
+
+```{r}
+table(bike_cleaned_3$workingday)
+table(bike_cleaned_3$weekday, bike_cleaned_3$holiday)
+table(bike_cleaned_3$workingday, bike_cleaned_3$weekday, bike_cleaned_3$holiday)
+bike_cleaned_3 %>%
+  group_by(weekday, holiday) %>%
+  summarize(workingday = unique(workingday), .groups = 'drop')
+```
+
+
+#Question 13 The backward stepwise method removes only one variable. Which variable is removed?
+A. windspeed
+B. workingday
+C. hum
+D. holiday
+
+```{r}
+full_model <- lm(count ~ season + mnth + hr + holiday + weekday + workingday + weathersit + temp + atemp + hum + windspeed, data = bike_cleaned_3)
+step_model <- stepAIC(full_model, direction = "backward")
+summary(step_model)
+```
+

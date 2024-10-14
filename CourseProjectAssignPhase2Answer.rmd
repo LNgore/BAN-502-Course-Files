@@ -1,0 +1,537 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+
+## BAN 502 Course Project: Phase 2
+## Ngore, Lucy
+## Predictive Models for the variable "Above_Median"
+
+Packages
+```{r}
+install.packages("naniar",repos = "https://cran.r-project.org")
+install.packages("ROCR",repos = "https://cran.r-project.org")
+install.packages("brglm2",repos = "https://cran.r-project.org")
+```
+
+Libraries
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(caret)  # For model training
+library(randomForest)  # For Random Forest regression
+library(nnet)  # For Neural Networks
+library(e1071)
+library(rlang)
+library(VIM)
+library(naniar)
+library(ggplot2)
+library(dplyr)
+library(GGally)
+library(lmtest) #for the Durbin-Watson test
+library(ROCR)
+library(glmnet)
+library(rpart.plot)
+library(recipes)
+library(brglm2)
+library(magrittr)
+library(ranger) #for random forests
+```
+
+Reading-in ames dataset
+```{r}
+ames = read_csv("ames_student-1.csv")
+```
+
+Structure and summary
+```{r}
+str(data)
+summary(ames)
+```
+
+I won't be using all the listed 81 variables especially Latitude and Longitude variables in my models.
+
+####Visuals
+MS_SubClass(One_Story_1946_and_Newer_All_Styles = highest)
+```{r}
+ggplot(ames, aes(x=MS_SubClass, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+MS_Zoning ("Residential_Low-Density" is the highest)
+```{r}
+ggplot(ames, aes(x=MS_Zoning, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+Lot_Frontage
+```{r}
+ggplot(ames, aes(x=Lot_Frontage, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+Alternative (100% stacked)
+```{r}
+ggplot(ames, aes(x=Lot_Frontage, fill = Above_Median)) + geom_bar(position="fill") + theme_bw()
+```
+
+Lot_Area
+```{r}
+ggplot(ames, aes(x=Lot_Area, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+Alternative (looking at tabular data. Hard to tell)
+```{r}
+ggplot(ames, aes(x=Lot_Area, fill = Above_Median)) + geom_bar(position="fill") + theme_bw()
+```
+
+Filter out large #s. Hard to read.
+```{r}
+ggplot(ames, aes(x=Lot_Area, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+House_Style
+```{r}
+ggplot(ames, aes(x=House_Style, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+Bldg_Type (townhouses show slight significance)
+```{r}
+ggplot(ames, aes(x=Bldg_Type, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+Overall_Qual(Good is highest)
+```{r}
+ggplot(ames, aes(x=Overall_Qual, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+Overall_Cond (Average condition is the highest)
+```{r}
+ggplot(ames, aes(x=Overall_Cond, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+Neighborhood
+```{r}
+ggplot(ames, aes(x=Neighborhood, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+Roof_Style
+```{r}
+ggplot(ames, aes(x=Roof_Style, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+Bedroom_AbvGr
+```{r}
+ggplot(ames, aes(x=Bedroom_AbvGr, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+TotRms_AbvGrd
+```{r}
+ggplot(ames, aes(x=TotRms_AbvGrd, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+Fireplaces ( 1 fireplace is highest)
+```{r}
+ggplot(ames, aes(x=Fireplaces, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+Year_Built(above median prices seen in sales of recent homes)
+```{r}
+ggplot(ames, aes(x=Year_Built, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+Heating 
+```{r}
+ggplot(ames, aes(x=Heating, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+Heating_QC(homes with excellent heating fell above the median)
+```{r}
+ggplot(ames, aes(x=Heating_QC, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+Garage_Type(Attached garage highest)
+```{r}
+ggplot(ames, aes(x=Garage_Type, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+Garage_Cars(housing with 2 Car garage were above_median)
+```{r}
+ggplot(ames, aes(x=Garage_Cars, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+Pool_QC
+```{r}
+ggplot(ames, aes(x=Pool_QC, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+Fence (No fence highest)
+```{r}
+ggplot(ames, aes(x=Fence, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+Year_Sold(2007 is highest)
+```{r}
+ggplot(ames, aes(x=Year_Sold, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+Sale_Type
+```{r}
+ggplot(ames, aes(x=Sale_Type, fill = Above_Median)) + geom_bar() + theme_bw()
+```
+
+#Splitting the dataset. 
+```{r}
+set.seed(123)  
+ames_split <- initial_split(ames, prop = 0.8)
+train <- training(ames_split)
+test <- testing(ames_split)
+```
+
+Visualize using the training set (looking at relationship between Above_Median & the other variables).
+
+```{r}
+ggplot(train,aes(x=Above_Median, y=House_Style)) + geom_boxplot() + 
+  theme_bw()
+```
+at table.
+```{r}
+t1 = table(train$Above_Median,train$House_Style)
+prop.table(t1, margin = 2)
+```
+Sales for Two_Story housing style was Above_Median.
+
+MS_SubClass
+```{r}
+ggplot(train,aes(x=Above_Median, y=MS_SubClass)) + geom_boxplot() + 
+  theme_bw()
+```
+
+Year_Sold(housing sales in 2008 fell above the median price)
+```{r}
+ggplot(train,aes(x=Above_Median, y=Year_Sold)) + geom_boxplot() + 
+  theme_bw()
+```
+
+Year_Built(sales of housing built around 2007 tend to be above the median but there are so many outliers)
+```{r}
+ggplot(train,aes(x=Above_Median, y=Year_Built)) + geom_boxplot() + 
+  theme_bw()
+```
+
+MS_Zoning
+```{r}
+ggplot(train,aes(x=Above_Median, y=MS_Zoning)) + geom_boxplot() + 
+  theme_bw()
+```
+
+Lot_Frontage
+```{r}
+ggplot(train,aes(x=Above_Median, y=Lot_Frontage)) + geom_boxplot() + 
+  theme_bw()
+```
+Fence
+```{r}
+ggplot(train,aes(x=Above_Median, y=Fence)) + geom_boxplot() + 
+  theme_bw()
+```
+
+Lot_Area(hard to see with outliers)
+```{r}
+ggplot(train,aes(x=Above_Median, y=Lot_Area)) + geom_boxplot() + 
+  theme_bw()
+```
+
+Bldg_Type 
+```{r}
+ggplot(train,aes(x=Above_Median, y=Bldg_Type)) + geom_boxplot() + 
+  theme_bw()
+```
+at table.
+```{r}
+t2 = table(train$Above_Median,train$Bldg_Type)
+prop.table(t2, margin = 2)
+```
+Sales of townhouses were above the median.
+
+Overall_Qual
+```{r}
+ggplot(train,aes(x=Above_Median, y=Overall_Qual)) + geom_boxplot() + 
+  theme_bw()
+```
+
+Weak relationships exist between the response variable and the other variables. The sale of houses built in 2008 seem to fall above the median price, but there are so many outliers.
+
+
+##Building models- Logistic regression
+```{r}
+ames_model = 
+  logistic_reg(mode = "classification") %>% 
+  set_engine("glm") #standard logistic regression engine is glm
+ames_recipe = recipe(Above_Median ~ Year_Built, train)
+
+logreg_wf = workflow() %>%
+  add_recipe(ames_recipe) %>% 
+  add_model(ames_model)
+ames_fit = fit(logreg_wf, train)
+summary(ames_fit$fit$fit$fit)
+```
+AIC of this model (a measure of model quality) is 1639. Using AIC value to compare this model to others.
+
+Looking at how the above model will fare with all predictors
+```{r}
+model <- logistic_reg(mode = "classification") %>%
+  set_engine("glm")
+ames_recipe = recipe(Above_Median ~., train)
+
+logreg_wf = workflow() %>%
+  add_recipe(ames_recipe) %>% 
+  add_model(ames_model)
+
+ames_fit2 = fit(logreg_wf, train)
+options(scipen = 999)
+summary(ames_fit2$fit$fit$fit)
+```
+#Accuracy
+```{r}
+train <- train %>%
+  mutate(Above_Median = as.factor(Above_Median))
+ames_model <- logistic_reg(mode = "classification") %>%
+set_engine("glm")
+ames_recipe <- recipe(Above_Median ~ ., data = train)
+logreg_wf <- workflow() %>%
+  add_recipe(ames_recipe) %>% 
+  add_model(ames_model)
+ames_fit2 <- fit(logreg_wf, data = train)
+train_predictions <- predict(ames_fit2, new_data = train, type = "class") %>%
+  bind_cols(train)
+train_confusion <- confusionMatrix(train_predictions$.pred_class, train$Above_Median)
+train_accuracy <- train_confusion$overall['Accuracy']
+print(paste("Training Accuracy:", round(train_accuracy, 4)))
+```
+
+```{r}
+test <- test %>%
+  mutate(Above_Median = as.factor(Above_Median))
+test_predictions <- predict(ames_fit2, new_data = test, type = "class") %>%
+  bind_cols(test)
+test_confusion <- confusionMatrix(test_predictions$.pred_class, test$Above_Median)
+test_accuracy <- test_confusion$overall['Accuracy']
+print(paste("Testing Accuracy:", round(test_accuracy, 4)))
+```
+
+
+Some predictors are not significant and some coefficients don't make sense. AIC is bigger (51394) than single variable model(1639).
+
+Add Year_Built and Year_sold variables
+```{r}
+ames_model = 
+  logistic_reg() %>%  
+  set_engine("glm")
+
+ames_recipe = recipe(Above_Median ~ Year_Built + Year_Sold, train) %>%
+  step_dummy(all_nominal(), -all_outcomes())
+
+logreg_wf = workflow() %>%
+  add_recipe(ames_recipe) %>% 
+  add_model(ames_model)
+
+ames_fit3 = fit(logreg_wf, train)
+summary(ames_fit3$fit$fit$fit)
+```
+In this model, Year_Sold is significant and has a negative coefficient (recently built houses = above median). AIC of this model is not better than the prior one.
+
+Building model with other variables.
+```{r}
+ames_model = 
+  logistic_reg() %>% 
+  set_engine("glm") 
+
+ames_recipe = recipe(Above_Median ~ Year_Built + Year_Sold + Bldg_Type + House_Style + Fireplaces + Garage_Type + Fence, train) %>%
+  step_dummy(all_nominal(), -all_outcomes())
+
+logreg_wf = workflow() %>%
+  add_recipe(ames_recipe) %>% 
+  add_model(ames_model)
+
+ames_fit4 = fit(logreg_wf, train)
+summary(ames_fit4$fit$fit$fit)
+```
+In model 4,the following variables are statistically significant since their p < 0.05 level:
+Year_Built, Fireplaces, Bldg_Type_Twnhs, House_Style_One_Story, House_Style_Sfoyer, House_Style_Two_and_Half_Unf, Garage_Type_Detchd,Garage_Type_No_Garage, and Fence_Good_Wood.AIC is 1134, smaller compared to those in prior models.
+
+
+#Classification Tree for Year_Built, Year_Sold variables, and Bldg_Type variables
+```{r}
+ames_recipe = recipe(Above_Median ~ Year_Built, train)
+
+tree_model = decision_tree() %>% 
+  set_engine("rpart", model = TRUE) %>% 
+  set_mode("classification")
+
+ames_wflow = 
+  workflow() %>% 
+  add_model(tree_model) %>% 
+  add_recipe(ames_recipe)
+ames_fit = fit(ames_wflow, train)
+```
+
+Look at tree
+```{r}
+#looking at the tree's fit
+ames_fit %>%
+  pull_workflow_fit() %>%
+  pluck("fit")  
+```
+
+
+```{r}
+#extracting the tree's fit from the fit object
+tree = ames_fit %>% 
+  pull_workflow_fit() %>% 
+  pluck("fit")
+
+#plotting the tree
+rpart.plot(tree)
+```
+
+From the model, 90% of houses built after 1985 are above median price.
+
+```{r}
+ames_recipe = recipe(Above_Median ~ Year_Sold, train)
+
+tree_model = decision_tree() %>% 
+  set_engine("rpart", model = TRUE) %>% 
+  set_mode("classification")
+
+ames_wflow = 
+  workflow() %>% 
+  add_model(tree_model) %>% 
+  add_recipe(ames_recipe)
+ames_fit = fit(ames_wflow, train)
+```
+
+
+```{r}
+tree = ames_fit %>% 
+  pull_workflow_fit() %>% 
+  pluck("fit")
+
+rpart.plot(tree)
+```
+
+From the model, 51% of houses sold on and after 2010 are above median price.
+
+```{r}
+ames_recipe = recipe(Above_Median ~ Bldg_Type, train)
+tree_model = decision_tree() %>% 
+  set_engine("rpart", model = TRUE) %>% 
+  set_mode("classification")
+
+ames_wflow = 
+  workflow() %>% 
+  add_model(tree_model) %>% 
+  add_recipe(ames_recipe)
+ames_fit = fit(ames_wflow, train)
+```
+
+```{r}
+tree = ames_fit %>% 
+  pull_workflow_fit() %>% 
+  pluck("fit")
+rpart.plot(tree)
+```
+From the model, 54% of houses (Duplex, Townhouses,TwoFmCon) sold were above median price.
+
+#Calculating accuracy
+```{r}
+train <- train %>%
+  mutate(Above_Median = as.factor(Above_Median))
+ames_recipe <- recipe(Above_Median ~ Bldg_Type, data = train)
+tree_model <- decision_tree() %>% 
+  set_engine("rpart", model = TRUE) %>% 
+  set_mode("classification")
+ames_wflow <- workflow() %>% 
+  add_model(tree_model) %>% 
+  add_recipe(ames_recipe)
+ames_fit <- ames_wflow %>%
+  fit(data = train)
+predictions <- ames_fit %>%
+  predict(new_data = train) %>%
+  bind_cols(train)
+accuracy <- predictions %>%
+  metrics(truth = Above_Median, estimate = .pred_class)
+print(accuracy)
+```
+
+```{r}
+test <- test %>%
+  mutate(Above_Median = as.factor(Above_Median))
+test_predictions <- ames_fit %>%
+  predict(new_data = test) %>%
+  bind_cols(test)
+test_accuracy <- test_predictions %>%
+  metrics(truth = Above_Median, estimate = .pred_class)
+print(test_accuracy)
+```
+
+
+#Random Forest Model
+```{r}
+ames_recipe = recipe(Above_Median ~., train) %>%
+  step_dummy(all_nominal(), -all_outcomes())
+
+rf_model = rand_forest() %>% 
+  set_engine("ranger", importance = "permutation") %>% #added importance metric
+  set_mode("classification")
+
+ames_wflow = 
+  workflow() %>% 
+  add_model(rf_model) %>% 
+  add_recipe(ames_recipe)
+
+set.seed(123)
+ames_fit = fit(ames_wflow, train)
+rf_folds = vfold_cv(train, v = 5)
+
+```
+
+```{r}
+train$Above_Median <- as.factor(train$Above_Median)
+rf_model <- randomForest(Above_Median ~ ., data = train, ntree = 100)
+test$Above_Median <- as.factor(test$Above_Median)
+test_predictions <- predict(rf_model, newdata = test)
+confusion_matrix <- confusionMatrix(test_predictions, test$Above_Median)
+accuracy <- confusion_matrix$overall['Accuracy']
+print(accuracy)
+```
+
+```{r}
+train$Above_Median <- as.factor(train$Above_Median)
+rf_model <- randomForest(Above_Median ~ ., data = train, ntree = 100)
+train_predictions <- predict(rf_model, newdata = train)
+confusion_matrix_train <- confusionMatrix(train_predictions, train$Above_Median)
+training_accuracy <- confusion_matrix_train$overall['Accuracy']
+print(training_accuracy)
+```
+
+# Predictions on test set
+```{r}
+rf_preds <- predict(rf_model, newdata = test)
+levels(predictions) <- levels(train$Above_Median)
+predictions <- predict(rf_model, newdata = train)
+levels(predictions)
+```
+
+Cross-Validation
+```{r}
+train_control <- trainControl(method = "cv", number = 10)
+
+# Train the model using cross-validation
+cv_model <- train(Above_Median ~ ., data = train, 
+                  method = "glm", 
+                  family = "binomial", 
+                  trControl = train_control)
+# Summary of CV model
+summary(cv_model)
+```
+
+AIC is 51394, which is much bigger.
+
+
